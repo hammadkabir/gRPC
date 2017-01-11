@@ -39,19 +39,28 @@ import helloworld_echo_service_pb2_grpc
 
 def cb(future):
     print("Client message received", future.result())
+    #print(x)
 
 def run():
-    channel = grpc.insecure_channel('localhost:50051')
+    ip_addr, port = 'localhost', 50061
+    addr = ip_addr + ':' + str(port)
+    
+    key = open('certificate_store/client1.key').read()
+    crt = open('certificate_store/client1.crt').read()
+    root_crt = open('certificate_store/CA.crt').read()    
+    
+    client_credentials = grpc.ssl_channel_credentials(root_certificates=root_crt.encode(), private_key=key.encode(), certificate_chain=crt.encode())
+    channel = grpc.secure_channel(addr, client_credentials)
     stub = helloworld_echo_service_pb2_grpc.GreeterStub(channel)
-    for it in range(0,100):
+    
+    for it in range(0,10):
         msg = 'Test Message: '+str(it)
         print("Client sent: ", msg)
         response_future = stub.SayHello.future(helloworld_echo_service_pb2.HelloRequest(name=msg))
         response_future.add_done_callback(cb)
         time.sleep(0.03)
-    
-    #res = response_future.result()
-    time.sleep(10)
+
+    time.sleep(5)
 
 
 
