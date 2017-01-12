@@ -27,7 +27,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-"""The Python implementation of the GRPC helloworld.Greeter client."""
+""" Python implementation of GRPC-based client -- both insecure and SSL based."""
 
 from __future__ import print_function
 
@@ -39,9 +39,29 @@ import helloworld_echo_service_pb2_grpc
 
 def cb(future):
     print("Client message received", future.result())
-    #print(x)
 
-def run():
+
+def run_client():
+    """HTTP2-based gRPC client """
+    ip_addr, port = 'localhost', 50061
+    addr = ip_addr + ':' + str(port)
+
+    channel = grpc.insecure_channel(addr)
+    stub = helloworld_echo_service_pb2.GreeterStub(channel)
+    
+    for it in range(0,100):
+        msg = 'Test Message: '+str(it)
+        print("Client sent: ", msg)
+        response_future = stub.SayHello.future(helloworld_echo_service_pb2.HelloRequest(name=msg))
+        response_future.add_done_callback(cb)
+        time.sleep(0.03)
+    
+    time.sleep(5)
+
+
+
+def run_secure_client():
+    """ SSL & HTTP2-based gRPC client """
     ip_addr, port = 'localhost', 50061
     addr = ip_addr + ':' + str(port)
     
@@ -65,4 +85,5 @@ def run():
 
 
 if __name__ == '__main__':
-    run()
+    run_client()
+    #run_secure_client()

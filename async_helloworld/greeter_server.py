@@ -27,7 +27,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-"""The Python implementation of the GRPC helloworld.Greeter server."""
+""" Python implementation of the GRPC-based service - both insecure and SSL-based """
 
 from concurrent import futures
 import time
@@ -51,6 +51,22 @@ class Greeter(helloworld_echo_service_pb2_grpc.GreeterServicer):
 
 
 def start_serving():
+    ip_addr, port = '[::]', 50061
+    addr = ip_addr + ':' + str(port)
+
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    helloworld_echo_service_pb2_grpc.add_GreeterServicer_to_server(Greeter(), server)    
+    server.add_insecure_port(addr)
+    server.start()
+    
+    try:
+        while True:
+            time.sleep(_ONE_DAY_IN_SECONDS)
+    except KeyboardInterrupt:
+        server.stop(0)
+
+
+def start_serving_securely():
     key=open('certificate_store/server.key').read()
     crt=open('certificate_store/server.crt').read()
     
@@ -70,5 +86,8 @@ def start_serving():
     except KeyboardInterrupt:
         server.stop(0)
 
+
 if __name__ == '__main__':
     start_serving()
+    #start_serving_securely()
+    
