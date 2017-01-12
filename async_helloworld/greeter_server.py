@@ -51,6 +51,7 @@ class Greeter(helloworld_echo_service_pb2_grpc.GreeterServicer):
 
 
 def start_serving():
+    """ Unprotected gRPC server """
     ip_addr, port = '[::]', 50061
     addr = ip_addr + ':' + str(port)
 
@@ -67,6 +68,7 @@ def start_serving():
 
 
 def start_serving_securely():
+    """ SSL/TLS based gRPC server """
     key=open('certificate_store/server.key').read()
     crt=open('certificate_store/server.crt').read()
     
@@ -87,7 +89,32 @@ def start_serving_securely():
         server.stop(0)
 
 
+def start_serving_securely2():
+    """ SSL/TLS based gRPC server - Mutual Authentication (where server authenticates the client as well) """
+    
+    key=open('certificate_store/server.key').read()
+    crt=open('certificate_store/server.crt').read()
+    root_crt = open('certificate_store/CA.crt').read()
+    
+    ip_addr, port = '[::]', 50061
+    addr = ip_addr + ':' + str(port)
+
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    helloworld_echo_service_pb2_grpc.add_GreeterServicer_to_server(Greeter(), server)
+        
+    server_credentials = grpc.ssl_server_credentials([(key.encode(), crt.encode())], root_certificates=root_crt.encode(), require_client_auth=True) 
+    server.add_secure_port(addr, server_credentials)
+    server.start()
+    
+    try:
+        while True:
+            time.sleep(_ONE_DAY_IN_SECONDS)
+    except KeyboardInterrupt:
+        server.stop(0)
+
+
 if __name__ == '__main__':
-    start_serving()
+    #start_serving()
     #start_serving_securely()
+    start_serving_securely2()
     

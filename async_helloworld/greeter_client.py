@@ -85,5 +85,5 @@ def run_secure_client():
 
 
 if __name__ == '__main__':
-    run_client()
-    #run_secure_client()
+    #run_client()
+    run_secure_client()
