@@ -1,0 +1,21 @@
+1. gRPC communication on IPv4/IPv6 addresses? Why listen error on IPv6 address?
+    Test with IPv4: Works fine.
+    Tested with IPv6: Works fine, when tested with the IPv6 loopback address.
+    Shall ideally work fine with other IPv6 addresses as well. But my system kept generating error: 'Temporary failure in name resolution' when trying to bind gRPC server instance on any other IPv6 address. Probably, some problem with IPv6 networking in my VM, since the normal python socket bind on IPv6 address also generated the same error. Probably, someone can verify this.
+
+2. Note: gRPC seems to have LIFO queue of outgoing messages. For example, while gRPC is waiting for client-to-server connection to complete (and probably under load situations too), it queues all the messages/RPC-calls client has to send. Upon completion of the connection to server, gRPC client node sends these queued messages as part of one long HTTP2 message containing different DATA headers (i.e. one data header for each message/RPC-call). However, these DATA headers are arranged in LIFO style within HTTP2 message compared to the order of messages sent by gRPC client. As a result, the message that was sent first will be processed last by the gRPC server.
+    Using gRPC for CETP negotiation means that our first host that sent the first DNS message (and resulted in triggering of CETP negotiation), will suffer the most delay. As its message will be processed by gRPC server, only after all the other messages are processed. In updated gRPC versions, if this ordering of messages is changed to FIFO, this shall solve the problem.
+        
+3. gRPC API doesn't offer any method for detecting if remote end, (i.e. client or server) has closed the connection. 
+    It does report some status changes of the communication channel (to the client side), e.g. when a client becomes IDLE, is still CONNECTING, or Ready to send message. But doesn't report the status, if the server has closed the connection (OR server simply disappears).
+    But, gRPC API does not provide any reporting of the client or the communication channel for the server side. (I still need to check this in detail though).
+ 
+    Suggested solutions:    (Both are Reactive approaches though)
+        a) One approach is that client sends a message, and in response it receives some exception telling that connection is not available.
+        b) Implementing own health-checking on top.
+    *) Ideal solution will be if the channelConnectivity.SHUTDOWN message is conveyed by gRPC.
+
+4. The performance at server side is dependent on the number of workers.
+5.
+
+    
