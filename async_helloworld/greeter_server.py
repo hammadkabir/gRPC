@@ -32,6 +32,7 @@
 from concurrent import futures
 import time
 import grpc
+import random
 
 import helloworld_echo_service_pb2
 import helloworld_echo_service_pb2_grpc
@@ -40,22 +41,21 @@ from grpc._cython import cygrpc as _cygrpc
 
 
 _ONE_DAY_IN_SECONDS = 60 * 60 * 24
-
+_MAX_WORKERS = 1
 
 class Greeter(helloworld_echo_service_pb2_grpc.GreeterServicer):
 
     def SayHello(self, request, context):
-        time.sleep(0.5)
-        print(request)
-        return helloworld_echo_service_pb2.HelloReply(message='Hello, %s!' % request.name)
-
+        #print(request)
+        time.sleep(random.random())
+        return helloworld_echo_service_pb2.HelloReply(message='Hello, {}'.format(request.name))
 
 def start_serving():
     """ Unprotected gRPC server """
-    ip_addr, port = '[::]', 50061
+    ip_addr, port = '[::]', 50061                   # IPv6 address shall be provided in square brackets.
     addr = ip_addr + ':' + str(port)
 
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=_MAX_WORKERS))
     helloworld_echo_service_pb2_grpc.add_GreeterServicer_to_server(Greeter(), server)    
     server.add_insecure_port(addr)
     server.start()
@@ -75,7 +75,7 @@ def start_serving_securely():
     ip_addr, port = '[::]', 50061
     addr = ip_addr + ':' + str(port)
 
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=_MAX_WORKERS))
     helloworld_echo_service_pb2_grpc.add_GreeterServicer_to_server(Greeter(), server)
         
     server_credentials = grpc.ssl_server_credentials([(key.encode(), crt.encode())]) 
@@ -96,10 +96,10 @@ def start_serving_securely2():
     crt=open('certificate_store/server.crt').read()
     root_crt = open('certificate_store/CA.crt').read()
     
-    ip_addr, port = '[::]', 50061
+    ip_addr, port = 'localhost', 50061
     addr = ip_addr + ':' + str(port)
 
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=_MAX_WORKERS))
     helloworld_echo_service_pb2_grpc.add_GreeterServicer_to_server(Greeter(), server)
         
     server_credentials = grpc.ssl_server_credentials([(key.encode(), crt.encode())], root_certificates=root_crt.encode(), require_client_auth=True) 
