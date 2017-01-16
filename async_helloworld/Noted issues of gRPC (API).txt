@@ -16,6 +16,6 @@
     *) Ideal solution will be if the channelConnectivity.SHUTDOWN message is conveyed by gRPC.
 
 4. The performance at server side is dependent on the number of workers.
-5.
+5. gRPC API doesn't currently have any method to close the communication channel from client or server side. An issue reported by many to their forum.
 
     
