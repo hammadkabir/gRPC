@@ -151,7 +151,7 @@ class grpcClientAPI:
         grpc_msg = self.msg_encoding(name=msg)
         return grpc_msg
     
-    def send_message(self, msg):
+    def send_sync(self, msg):
         """Translates message to protobuf, and sends it to the remote peer.
         Could be sub-classed as per the need.
         """
@@ -160,7 +160,7 @@ class grpcClientAPI:
         return resp
     
     @asyncio.coroutine
-    def send_message2(self, msg):
+    def send_sync_coroutine(self, msg):
         """Translates message to protobuf, and sends it to the remote peer.
         Could be sub-classed as per the need.
         """
@@ -176,11 +176,12 @@ class grpcClientAPI:
         """
         #grpc_msg = self.message_encoding(msg)
         try:
-            response_future = self.client_grpc_handler.future(msg, timeout=10.0)
+            response_future = self.client_grpc_handler.future(msg, timeout=None)
             if cb is not None:
                 response_future.add_done_callback(cb)
             else:
                 return response_future
+            
         except Exception as msg:
             print("Exception in send_message_async: ", msg)
 
@@ -215,6 +216,7 @@ def generate_random_string(self, message_size=10):
     st=''.join(random.choice(lis) for _ in range(message_size))
     return st
 
+
 class Client:
     def __init__(self):
         self.msg_lst = []
@@ -231,6 +233,17 @@ class Client:
         #return self.comm_channel
         #yield from channel_ready_future.result() 
         return channel_ready_future
+    
+    @asyncio.coroutine
+    def connect2(self, ip, port):
+        ip_addr, port = 'localhost', 50061
+        key = open('../certificate_store/client1.key').read()
+        crt = open('../certificate_store/client1.crt').read()
+        root_crt = open('../certificate_store/CA.crt').read()      
+    
+        self.c = grpcClientAPI(grpc_client_stub=helloworld_echo_service_pb2.GreeterStub, msg_encoding=helloworld_echo_service_pb2.HelloRequest)
+        self.comm_channel = yield from self.c.connect(ip_addr, port)
+
         
     def channel_cb(self, future):
         try:
@@ -270,41 +283,40 @@ class Client:
         
     def send_sync(self, msg):
         grpc_msg = self.c.message_encoding(msg)
-        resp = self.c.send_message(grpc_msg)
+        resp = self.c.send_sync(grpc_msg)
         print(resp.message)
 
     @asyncio.coroutine
-    def send_sync2(self, msg):
+    def send_sync_coroutine(self, msg):
         grpc_msg = self.c.message_encoding(msg)
-        resp = yield from self.c.send_message2(grpc_msg)
-        print('From send_sync2()', resp.message)
+        resp = yield from self.c.send_sync_coroutine(grpc_msg)
+        #print('From send_sync_coroutine()', resp.message)
         
     def send_async(self, msg, callback=None):
         grpc_msg = self.c.message_encoding(msg)
-        resp = self.c.send_message_async(grpc_msg, cb=callback)           # Asynchronous message sending
+        resp_future = self.c.send_message_async(grpc_msg, cb=callback)           # Asynchronous message sending
         
     @asyncio.coroutine
-    def send2_async(self, msg):
+    def send_async_coroutine(self, msg):
         grpc_msg = self.c.message_encoding(msg)
-        resp = self.c.send_message_async(grpc_msg)           # Asynchronous message sending
+        resp_future = self.c.send_message_async(grpc_msg)                       # Asynchronous message sending
         try:
-            yield from resp.result()
+            response = yield from resp_future.result()
         except Exception as msg:
-            print("Exception msg: ", msg, "AND", resp.exception())
+            print("Exception msg: ", msg, "AND", resp_future.exception())
         #resp.add_done_callback(cb)                           # yield from on individual messages later
 
-#@asyncio.coroutine
+#Normal gRPC service - processing messages in non-blocking mode
 def test():
     ip_addr, port = 'localhost', 50061
     c=Client()
-    #c.connect(ip_addr, port)
     channel_ready_future = c.connect(ip_addr, port)
-    channel_ready_future.add_done_callback(c.channel_cb)        # Tells you when channel is ready, doesn't tell otherway around i.e. if channel id Down or etc.
-    #yield from asyncio.sleep(1)                                # Not accurate.
+    channel_ready_future.add_done_callback(c.channel_cb)        # A grpc Future that invokes, when channel is ready. Doesn't work otherway around i.e. if channel is Down or etc.
+    time.sleep(0.5)
     
-    for it in range(10):                                # To send set of messages
+    for it in range(5):                                         # To send set of messages
         msg = "I am Hammad"+str(it)
-        time.sleep(0.00004)
+        time.sleep(0.004)
         
         if channel_ready_future.done():
             c.send_async(msg, callback=cb)
@@ -312,97 +324,102 @@ def test():
             c.handle_sending(msg)
 
     
-
+# Normal gRPC client - processing messages in blocking mode
 def test2():
     ip_addr, port = 'localhost', 50061
     c=Client()
-    #c.connect(ip_addr, port)
     channel_ready_future = c.connect(ip_addr, port)
-    channel_ready_future.add_done_callback(c.channel_cb)        # Tells you when channel is ready, doesn't tell otherway around i.e. if channel id Down or etc.
-    #yield from asyncio.sleep(1)
+    channel_ready_future.add_done_callback(c.channel_cb)        # A grpc Future that invokes, when channel is ready. Doesn't work otherway around i.e. if channel is Down or etc.
+    time.sleep(0.5)
     
-    for it in range(10):                                # To send set of messages
+    for it in range(5):                                         # To send set of messages
         msg = "I am Hammad"+str(it)
         res =  c.send_sync(msg)
         print("res", res)
         time.sleep(0.1)
 
+#Testing asyncio with gRPC in blocking mode    - might work with unary_streaming?
 @asyncio.coroutine
 def test3():
     ip_addr, port = 'localhost', 50061
     c=Client()
-    #c.connect(ip_addr, port)
+    #yield from c.connect2(ip_addr, port)                      # Doesn't work
+    channel_ready_future = c.connect(ip_addr, port)
+    channel_ready_future.add_done_callback(c.channel_cb)    
+    yield from asyncio.sleep(1)
+    
+    for it in range(5):                                        # To send set of messages
+        msg = "I am Hammad"+str(it)
+        try:
+            res =  yield from c.send_sync_coroutine(msg)
+            print("res", res)
+            yield from asyncio.sleep(0.1)
+        except Exception as msg:
+            print("Exception", msg)
+
+
+#Testing asyncio with gRPC in blocking mode    - might work with unary_streaming?
+@asyncio.coroutine
+def test3N():
+    ip_addr, port = 'localhost', 50061
+    c=Client()
+    print("Testing gRPC future with asyncio's 'yield from'")
+    channel_ready_future = c.connect(ip_addr, port)                 # Returns a gRPC future.
+    #print(type(channel_ready_future))
+    
+    try:
+        yield from channel_ready_future.result()
+        print("yielded")
+    except Exception as msg:
+        ex = channel_ready_future.exception() 
+        print("Exception in gRPC future: ", msg, "AND", ex)
+    
+    c.add_grpc()
+    yield from asyncio.sleep(1)
+    
+    for it in range(5):                                        # To send set of messages
+        msg = "I am Hammad"+str(it)
+        try:
+            res =  yield from c.send_sync_coroutine(msg)
+            print("res", res)
+            yield from asyncio.sleep(0.1)
+        except Exception as msg:
+            print("Exception", msg)
+
+    
+# Can't test gRPC asynchronous mode with asyncio - incompatibility b/w asyncio anf gRPC.
+@asyncio.coroutine
+def test4():
+    ip_addr, port = 'localhost', 50061
+    c=Client()
     channel_ready_future = c.connect(ip_addr, port)
     channel_ready_future.add_done_callback(c.channel_cb)        # Tells you when channel is ready, doesn't tell otherway around i.e. if channel id Down or etc.
     yield from asyncio.sleep(1)
     
-    for it in range(10):                                # To send set of messages
+    for it in range(5):                                # To send set of messages
         msg = "I am Hammad"+str(it)
-        res =  yield from c.send_sync2(msg)
-        print("res", res)
-        time.sleep(0.1)
+        yield from c.send_async_coroutine(msg)
+        yield from asyncio.sleep(0.1)
 
     
 if __name__ == '__main__':
     test()
     #test2()
     
+    # For test3(), test4(), test5() uncomment the following. And use the respective function name
     '''
     loop = asyncio.get_event_loop()
     try:
-        task1 = asyncio.ensure_future(test3())
+        task1 = asyncio.ensure_future(test3())          # Insert the name of respective function to test
         loop.run_until_complete(task1)
     except Exception as msg:
         print("Exception in main(): ", msg)
-        
-    loop.close()
-       
     '''
         
-    '''
-    loop = asyncio.get_event_loop()
-    ip_addr, port = 'localhost', 50061
-    c=Client()
-    #c.connect(ip_addr, port)
-    channel_ready_future = c.connect(ip_addr, port)
-    channel_ready_future.add_done_callback(c.channel_cb)        # Tells you when channel is ready, doesn't tell otherway around i.e. if channel id Down or etc.
-    
-    #time.sleep(1)
-    '''
-    
-    '''
-    for it in range(10):                                # To send set of messages
-        msg = "I am Hammad"+str(it)
-        if channel_ready_future.done():
-            c.send_async(msg)
-        else:
-            c.handle_sending(msg)
-        time.sleep(0.00004)
-    '''
-        
-    
-    '''
-    #Following is all blocking
-    channel_ready_future = c.connect(ip_addr, port)
-    try:
-        channel_ready_future.result(2)
-        print("The channel is ready")
-    except Exception as msg:
-        print("Exception in client connection setup: ", msg)
-        
-    if channel_ready_future.done():
-        c.add_grpc()
-        time.sleep(2)
-    
-        for it in range(2):                                # To send set of messages
-            msg = "I am Hammad"+str(it)
-            c.send(msg)
-            time.sleep(0.1)
-    '''
-
-
 try:
     while True:
         time.sleep(_ONE_DAY_IN_SECONDS)
 except KeyboardInterrupt:
     print('\nClient instance terminates')
+    loop.close()   
+

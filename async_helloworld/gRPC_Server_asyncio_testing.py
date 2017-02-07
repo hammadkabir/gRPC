@@ -44,9 +44,8 @@ _ONE_DAY_IN_SECONDS = 60 * 60 * 24
 
 
 class iCESClient:
-    def __init__(self, name):
+    def __init__(self):
         self.cnt = 0
-        self.name=name
     
     def resp(self, req):
         try:
@@ -63,23 +62,6 @@ class iCESClient:
             return helloworld_echo_service_pb2.HelloReply(message='Hello, %s!' % req)
         except Exception as msg:
             print(msg)
-    
-    def resp3(self, req):
-        try:
-            if self.name==0:
-                time.sleep(5)
-            else: 
-                time.sleep(0.1)
-                print(self.name)
-            
-            return req
-        except Exception as msg:
-            print(msg)
-
-    def processing_delay(self):
-        time.sleep(0.02)
-
-
 
 
 class Greeter(helloworld_echo_service_pb2_grpc.GreeterServicer):
@@ -96,28 +78,30 @@ class Greeter(helloworld_echo_service_pb2_grpc.GreeterServicer):
         
     def add(self, peer_id, ices_obj):
         self.ices_object[peer_id]=ices_obj
-        
+    
+    #"""   
+    #Normal gRPC Service implementation 
     def SayHello(self, request, context):
-        print("Start")
-        #print(request)
         #grpc.ServicerContext
         #n = context.invocation_metadata()        # information about client user-agent & gRPC version.
         #print(n)
-        #context.cancel()
+        #context.cancel()en(self.ices_object)
         
         peer_id = context.peer()
         if self.has(peer_id):
             ices_obj = self.get(peer_id)
         else:
-            ices_obj = iCESClient(len(self.ices_object))
+            ices_obj = iCESClient()
             self.add(peer_id, ices_obj)
         
+        print("Message received", request.name)
         resp = ices_obj.resp(request.name)
-        print("End")
         return helloworld_echo_service_pb2.HelloReply(message='Hello, %s!' % resp)      # This desired response can be sent as callback
+    #"""
     
         
-    '''    
+    '''
+    # An attempt at using asyncio with grpc-service
     def SayHello(self, request, context):
         # Testing for asyncio at server side
         print("Start")
@@ -128,15 +112,16 @@ class Greeter(helloworld_echo_service_pb2_grpc.GreeterServicer):
             ices_obj = iCESClient()
             self.add(peer_id, ices_obj)
         
-        asyncio.set_event_loop(self.loop)       # To avoid problem of not finding any loop.
+        asyncio.set_event_loop(self.loop)                           # To avoid problem of not finding any loop.
         t = asyncio.ensure_future(ices_obj.resp2(request.name))
-        self.loop.run_until_complete(t)
         
         print("End")
-        return helloworld_echo_service_pb2.HelloReply(message='Hello, %s!' % resp)
+        return helloworld_echo_service_pb2.HelloReply(message='Hello, %s!' % t.result())
     '''
     
-    '''    
+    '''
+    # Another attempt at using asyncio with gRPC-service 
+    @asyncio.coroutine
     def SayHello(self, request, context):
         # Testing for asyncio at server side
         print("Start")
@@ -147,9 +132,8 @@ class Greeter(helloworld_echo_service_pb2_grpc.GreeterServicer):
             ices_obj = iCESClient()
             self.add(peer_id, ices_obj)
         
-        some_task = self.loop.create_task(ices_obj.resp(request.name))
-        resp = await some_task                    # Not possible, as SayHello isn't a coroutine itself.
-                                                  # I can run it without waiting for task to complete, but that ll crash
+        client_task = self.loop.create_task(ices_obj.resp(request.name))
+        resp = yield from client_task                    # Not possible, as SayHello isn't a coroutine itself.
                                                   
         return helloworld_echo_service_pb2.HelloReply(message='Hello, %s!' % resp)
         #context.cancel()
@@ -212,6 +196,7 @@ class grpcServerAPI:
         return self._server
 
 
+# Within Greeter class(), kindly uncomment one and comment the rest of SayHello function definitions - for normal gRPC and asyncio-gRPC service testing.
 
 if __name__ == '__main__':
     ip_addr, port = 'localhost', 50061    
@@ -220,8 +205,7 @@ if __name__ == '__main__':
     root_crt = open('../certificate_store/CA.crt').read()
 
     s=grpcServerAPI(max_workers=1)
-    #s.create_secure_server(ip_addr, port, priv_key=key, cert=crt, root_cert=root_crt, require_client_auth=False)
-    s.create_server(ip_addr, port)                                                   # Un-encrypted connection
+    s.create_server(ip_addr, port)
     s.add_grpc_service(grpc_service_file=helloworld_echo_service_pb2, grpc_server_class=Greeter)
     s.start_listening()
 
